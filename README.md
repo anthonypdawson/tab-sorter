@@ -30,12 +30,11 @@ Settings (extension Settings page) offers, default `none`:
    Run `ollama serve` and `ollama pull qwen2.5:3b` first.
    Ollama note: Ollama rejects `chrome-extension://` origins by default,
    which shows up as "Ollama request failed: 403" if you call it from a
-   popup page. This extension routes Ollama (and cloud) fetches through
-   its background service worker, which is Chrome's privileged
-   cross-origin route and may avoid that rejection, with no server
-   change needed. If you still get a 403, that is Ollama's own Origin
-   check, and the fallback is a one-time server setting, then a full
-   restart of Ollama (on macOS, the menu-bar app does not inherit
+   popup page. AI fetches run from the popup, not the background worker:
+   routing them through the worker was tried and did not change the 403,
+   because both send the same extension origin. If you get a 403, that
+   is Ollama's own Origin check, and the fix is a one-time server
+   setting, then a full restart of Ollama (on macOS, the menu-bar app does not inherit
    your shell, so an `export` in a terminal alone does not work):
    ```
    launchctl setenv OLLAMA_ORIGINS "chrome-extension://*"
@@ -121,9 +120,10 @@ Chrome APIs are mocked or driven by a real browser only where needed.
   npm test
   # or: node --test tests/unit.test.js
   ```
-  12 tests cover URL normalization, tracking-param stripping, grouping,
-  dedupe (exact and near-duplicate), stale detection, and AI JSON parsing.
-  These were run locally and pass 12/12.
+  18 tests cover URL normalization, tracking-param stripping, grouping,
+  dedupe (exact and near-duplicate), stale detection, AI JSON parsing,
+  and AI preview validation.
+  These were run locally and pass 18/18.
 - **Browser test (needs a real browser, Playwright):**
   `tests/browser.test.js` launches Chromium with the unpacked extension
   loaded, opens test tabs, and checks the popup page renders its
@@ -164,8 +164,8 @@ Chrome APIs are mocked or driven by a real browser only where needed.
 - Works on the current window only.
 - Chrome built-in AI depends on the browser build and flags, and can
   be disabled by enterprise policy.
-- Ollama 403 via the background worker is untested against a live
-  Ollama server in this environment — see the Ollama note above for
-  the fallback if it still occurs.
+- Ollama 403: Ollama rejects the extension origin by default — see the
+  Ollama note above for the OLLAMA_ORIGINS fallback. Routing through
+  the background worker was tested and did not avoid it.
 - Cloud backend assumes an OpenAI-compatible chat-completions endpoint.
 - No sync across machines, no auto-close, by design.
