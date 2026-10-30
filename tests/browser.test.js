@@ -35,6 +35,14 @@ test("extension loads and popup renders", async () => {
   const context = await chromium.launchPersistentContext("", {
     // In CI, run headless. Locally, headed, so you can watch the extension load.
     headless: process.env.CI === "true",
+    // channel: 'chromium' is the fix for the CI failure where the
+    // service worker never started at all (worker was undefined after
+    // a 20s wait, not just late). Playwright's own Chrome extensions
+    // docs say to use this channel to run extensions in headless
+    // mode; without it, headless Chromium can load with no extension
+    // service worker to find. Headed mode is the fallback if this
+    // still fails in CI — run under xvfb instead of headless.
+    channel: "chromium",
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
