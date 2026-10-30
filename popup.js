@@ -27,10 +27,62 @@ async function closeTabs(tabs) {
   await chrome.tabs.remove(tabs.map((t) => t.id));
 }
 
+// AI preview: the AI call runs from the popup, as originally, not from
+// the background worker — that route was tried and reverted, it did not
+// fix Ollama's 403. Nothing is grouped until the user presses Apply in
+// the preview, so a bad AI suggestion never rearranges tabs on its own.
+// Closing the popup discards the preview, which is safe by design.
+let pendingAiGroups = null;
+
+function renderAiPreview(preview, statusEl) {
+  const el = document.getElementById("aiPreview");
+  el.innerHTML = "";
+  const heading = document.createElement("div");
+  heading.innerHTML = "<strong>AI preview — not applied yet</strong><div class='tab'>Review these groups, then Apply, or Cancel to leave your tabs as they are.</div>";
+  el.appendChild(heading);
+  for (const g of preview.groups) {
+    const div = document.createElement("div");
+    div.className = "group";
+    div.innerHTML = "<strong>" + escapeHtml(g.name) + " (" + g.tabs.length + ")</strong>" +
+      g.tabs.map((t) => '<div class="tab">' + escapeHtml(t.title || t.url) + "</div>").join("");
+    el.appendChild(div);
+  }
+  if (preview.unassigned.length) {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = "<strong>Not grouped by AI (" + preview.unassigned.length + ")</strong>" +
+      preview.unassigned.map((t) => '<div class="tab">' + escapeHtml(t.title || t.url) + "</div>").join("");
+    el.appendChild(div);
+  }
+  const applyBtn = document.createElement("button");
+  applyBtn.textContent = "Apply AI groups";
+  applyBtn.onclick = async () => {
+    const groups = pendingAiGroups;
+    pendingAiGroups = null;
+    el.innerHTML = "";
+    for (const g of groups) {
+      const groupId = await chrome.tabs.group({ tabIds: g.tabs.map((t) => t.id) });
+      await chrome.tabGroups.update(groupId, { title: g.name });
+    }
+    await render();
+    document.getElementById("aiStatus").textContent = "AI grouped " + groups.length + " groups.";
+  };
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "Cancel preview";
+  cancelBtn.onclick = () => {
+    pendingAiGroups = null;
+    el.innerHTML = "";
+    statusEl.textContent = "AI preview cancelled. Your tabs were not regrouped.";
+  };
+  el.appendChild(applyBtn);
+  el.appendChild(cancelBtn);
+}
+
 async function aiGroup(tabs, settings, statusEl) {
   const list = tabs.map((t) => ({ id: t.id, title: t.title, url: t.url }));
   const prompt = "Group these browser tabs by topic/project. Return ONLY a JSON array like " +
-    '[{"name":"Group name","tabIds":[1,2]}]. Use only the tab ids given, put every tab in exactly one group. Tabs:\n' +
+    '[{"name":"Group name","tabIds":[1,2]}]. No markdown fences, no explanation, no other text. ' +
+    "Use only the tab ids given, put every tab in exactly one group. Tabs:\n" +
     JSON.stringify(list, null, 2);
 
   let text = "";
@@ -45,7 +97,7 @@ async function aiGroup(tabs, settings, statusEl) {
     text = data.message?.content || "";
   } else if (settings.backend === "chrome") {
     const LM = self.LanguageModel || window.LanguageModel;
-    if (!LM) throw new Error("Chrome built-in AI is not available in this browser build.");
+    if (!LM) throw new Error("Chrome built-in AI is not available in this browser build, or is disabled by policy.");
     const session = await LM.create();
     text = await session.prompt(prompt);
   } else if (settings.backend === "cloud") {
@@ -63,18 +115,21 @@ async function aiGroup(tabs, settings, statusEl) {
   }
 
   const groups = Lib.extractJson(text);
-  const validIds = new Set(tabs.map((t) => t.id));
-  for (const g of groups) {
-    const ids = (g.tabIds || []).filter((id) => validIds.has(id));
-    if (ids.length) {
-      const groupId = await chrome.tabs.group({ tabIds: ids });
-      await chrome.tabGroups.update(groupId, { title: String(g.name).slice(0, 40) });
-    }
-  }
-  statusEl.textContent = "AI grouped " + groups.length + " groups. Rule-based groups below are unchanged.";
+  const preview = Lib.filterValidAiGroups(groups, tabs);
+  if (!preview.groups.length) throw new Error("AI returned no usable groups.");
+  pendingAiGroups = preview.groups;
+  renderAiPreview(preview, statusEl);
+  statusEl.textContent = "AI preview ready (" + preview.groups.length + " groups). Nothing has been grouped yet — press Apply below, or Cancel.";
 }
 
 async function render() {
+  // A fresh render means a fresh tab list, so any pending AI preview
+  // based on the old list is discarded. Apply clears the preview
+  // itself before calling render(), so this is only for Refresh,
+  // stale-threshold changes, and similar re-renders.
+  pendingAiGroups = null;
+  const previewEl = document.getElementById("aiPreview");
+  if (previewEl) previewEl.innerHTML = "";
   const statusEl = document.getElementById("status");
   const aiStatusEl = document.getElementById("aiStatus");
   const win = await chrome.windows.getCurrent();
@@ -168,7 +223,10 @@ async function render() {
 
   document.getElementById("aiGroup").onclick = async () => {
     aiStatusEl.textContent = "Running AI grouping…";
-    try { await aiGroup(tabs, settings, aiStatusEl); render(); }
+    // Do NOT call render() on success here: render() would overwrite
+    // the preview status and re-bind this button. The preview stays
+    // in the popup until Apply (which re-renders) or Cancel.
+    try { await aiGroup(tabs, settings, aiStatusEl); }
     catch (e) { aiStatusEl.textContent = "AI grouping failed: " + e.message + " Rule-based groups still work."; }
   };
 }

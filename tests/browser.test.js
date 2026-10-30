@@ -7,9 +7,10 @@
 //
 // What it does, end to end:
 // 1. Launches Chromium with the unpacked extension loaded.
-// 2. Opens two test tabs (example.com pages with distinct titles are
-//    replaced here by data: URLs, so the test needs no network).
-// 3. Opens the extension popup via its service-worker background page
+// 2. Captures the extension id from its service worker immediately,
+//    before the MV3 worker can go idle (see the comment in the test).
+// 3. Opens two test tabs (data: URLs, so the test needs no network).
+// 4. Opens the extension popup via its service-worker background page
 //    approach used by Playwright's persistent context: it finds the
 //    extension's popup page by loading popup.html directly in a tab,
 //    which is enough to check the popup renders groups, because the
@@ -41,19 +42,33 @@ test("extension loads and popup renders", async () => {
   });
 
   try {
+    // Find the extension id from the service worker, immediately after
+    // launch. This is the fix for the CI failure at the old line 55
+    // (workers.length was 0): an MV3 service worker is event-driven
+    // and goes idle, so it is not guaranteed to still be listed later.
+    // The old code opened test tabs first, then waited for a *new*
+    // serviceworker event. If the worker had already started before
+    // that wait began, no new event ever fired, the 10s wait timed
+    // out, and by then the worker could have idled away, leaving an
+    // empty list. Capture it first, and only wait if it is not there
+    // yet. The captured Worker object keeps its URL even after the
+    // worker idles, and that URL is all we need for the extension id.
+    let worker = context.serviceWorkers()[0];
+    if (!worker) {
+      worker = await context.waitForEvent("serviceworker", { timeout: 20000 }).catch(() => null);
+    }
+    if (!worker) worker = context.serviceWorkers()[0];
+    expect(
+      worker,
+      "Extension service worker did not start. Check that manifest.json is at the repo root (the extension path above) and that background.js loads without errors."
+    ).toBeTruthy();
+    const extensionId = worker.url().split("/")[2];
+
     // Open two tabs the popup should be able to see.
     const page1 = await context.newPage();
     await page1.goto("data:text/html,<title>GitHub PR</title><h1>PR</h1>");
     const page2 = await context.newPage();
     await page2.goto("data:text/html,<title>Music video</title><h1>Music</h1>");
-
-    // Find the extension id from the service worker.
-    const serviceWorkers = context.serviceWorkers();
-    // The service worker may take a moment to register.
-    await context.waitForEvent("serviceworker", { timeout: 10000 }).catch(() => {});
-    const workers = context.serviceWorkers();
-    expect(workers.length).toBeGreaterThan(0);
-    const extensionId = workers[0].url().split("/")[2];
 
     // Load the popup page directly in a tab and check it renders.
     const popup = await context.newPage();

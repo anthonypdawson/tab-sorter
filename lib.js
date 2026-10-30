@@ -134,13 +134,69 @@ function findStale(tabs, lastSeen, staleDays, now = Date.now()) {
   );
 }
 
-function extractJson(text) {
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("AI did not return a JSON list.");
+// AI preview validation, pure so it is unit-testable: keep only tab ids
+// that actually exist, put a tab in at most one group (first group wins,
+// matching what Chrome would do by moving the tab), drop empty groups,
+// and report tabs the AI left out so the preview can show them.
+function filterValidAiGroups(groups, tabs) {
+  const byId = new Map((tabs || []).map((t) => [t.id, t]));
+  const used = new Set();
+  const result = [];
+  for (const g of Array.isArray(groups) ? groups : []) {
+    if (!g) continue;
+    const name = g.name || g.title || g.group;
+    if (!name) continue;
+    const ids = Array.isArray(g.tabIds) ? g.tabIds : Array.isArray(g.tabs) ? g.tabs : Array.isArray(g.ids) ? g.ids : [];
+    const list = [];
+    for (const id of ids) {
+      if (byId.has(id) && !used.has(id)) {
+        used.add(id);
+        list.push(byId.get(id));
+      }
+    }
+    if (list.length) result.push({ name: String(name).slice(0, 40), tabs: list });
   }
-  return JSON.parse(text.slice(start, end + 1));
+  return { groups: result, unassigned: (tabs || []).filter((t) => !used.has(t.id)) };
+}
+
+// Robust AI JSON extraction. Small local models often wrap the JSON in
+// prose or markdown fences, and tab titles themselves can contain
+// brackets like "[JN-2644]". The old version took the first "[" and
+// the last "]" and JSON.parsed that slice, so a title bracket at the
+// start of the response produced exactly:
+//   Unexpected token 'J', "[JN-2644]**"... is not valid JSON
+// Instead: strip fences, then try every candidate array that starts
+// with "[{" (allowing whitespace), longest end first, and return the
+// first slice that parses to a list of objects. If none parses, throw
+// a readable error with a snippet of what the model actually returned,
+// instead of the raw JSON.parse token error.
+function extractJson(text) {
+  const raw = String(text || "");
+  const cleaned = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
+  const candidates = [];
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] !== "[") continue;
+    let j = i + 1;
+    while (j < cleaned.length && /\s/.test(cleaned[j])) j++;
+    if (cleaned[j] === "{") candidates.push(i);
+  }
+  for (const start of candidates) {
+    for (let end = cleaned.lastIndexOf("]"); end > start; end = cleaned.lastIndexOf("]", end - 1)) {
+      const slice = cleaned.slice(start, end + 1);
+      try {
+        const parsed = JSON.parse(slice);
+        if (Array.isArray(parsed) && parsed.every((g) => g && typeof g === "object")) return parsed;
+      } catch {
+        // Try once with trailing commas removed, a common small-model slip.
+        try {
+          const fixed = JSON.parse(slice.replace(/,\s*([}\]])/g, "$1"));
+          if (Array.isArray(fixed) && fixed.every((g) => g && typeof g === "object")) return fixed;
+        } catch {}
+      }
+    }
+  }
+  const snippet = raw.slice(0, 200).replace(/\s+/g, " ");
+  throw new Error("AI did not return a usable JSON group list. Model output started: " + snippet);
 }
 
 const lib = {
@@ -152,6 +208,7 @@ const lib = {
   groupTabs,
   findDuplicates,
   findStale,
+  filterValidAiGroups,
   extractJson,
 };
 

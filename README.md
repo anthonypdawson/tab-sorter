@@ -28,17 +28,45 @@ Settings (extension Settings page) offers, default `none`:
 1. **None** — rule-based only, nothing leaves the machine.
 2. **Local Ollama** — e.g. `http://localhost:11434`, model `qwen2.5:3b`.
    Run `ollama serve` and `ollama pull qwen2.5:3b` first.
+   Ollama note: Ollama rejects `chrome-extension://` origins by default,
+   which shows up as "Ollama request failed: 403" if you call it from a
+   popup page. This extension routes Ollama (and cloud) fetches through
+   its background service worker, which is Chrome's privileged
+   cross-origin route and may avoid that rejection, with no server
+   change needed. If you still get a 403, that is Ollama's own Origin
+   check, and the fallback is a one-time server setting, then a full
+   restart of Ollama (on macOS, the menu-bar app does not inherit
+   your shell, so an `export` in a terminal alone does not work):
+   ```
+   launchctl setenv OLLAMA_ORIGINS "chrome-extension://*"
+   ```
+   Quit Ollama completely, reopen it, and retry. You can narrow the
+   `*` to your extension's ID from `chrome://extensions` once it works.
+   Test with `curl -i -H 'Origin: chrome-extension://test' http://localhost:11434/api/tags`
+   — 403 before the fix, 200 after.
 3. **Chrome built-in on-device AI** — where that API is available in the
-   browser build. Not guaranteed in Brave.
+   browser build. Not guaranteed in Brave, and it can be disabled by
+   enterprise policy, in which case the extension reports it as
+   not available rather than trying a different backend on its own.
 4. **Cloud API (OpenAI-compatible)** — you supply endpoint, model, and key.
    Warning: with this backend, tab titles/URLs are sent to that endpoint
    when, and only when, you press "AI group". The key lives in
    `chrome.storage.local` on this machine only.
 
 AI grouping asks the backend for a JSON list of groups and tab ids,
-validates those ids against your actual tabs, and then creates Chrome
-tab groups. If AI fails, it falls back to an error message and the
-rule-based groups still work.
+validates those ids against your actual tabs, and then shows a
+preview — group names, tab titles, and any tabs the AI left out.
+Nothing is grouped until you press "Apply AI groups" in that preview;
+"Cancel preview" leaves your tabs exactly as they are, and closing
+the popup discards the preview. If AI fails, it falls back to an
+error message and the rule-based groups still work.
+Parsing note: small local models often wrap JSON in prose or markdown,
+and tab titles can contain brackets like "[JN-2644]". The parser
+strips fences and looks for a real `[{...}]` JSON array, instead of
+taking the first `[` in the response, which used to fail with
+"Unexpected token 'J'" on a ticket bracket. If the model returns no
+usable JSON at all, the error now shows the start of what it actually
+returned, instead of a raw token error.
 
 ## Install from the repo
 
@@ -119,8 +147,11 @@ Chrome APIs are mocked or driven by a real browser only where needed.
 
 - `manifest.json` — Manifest V3, permissions: tabs, tabGroups, storage.
 - `background.js` — tracks last-active time per tab, locally only.
-- `lib.js` — pure grouping / dedupe / stale / URL logic, shared by
-  the popup and the unit tests.
+  AI fetches run from the popup, not here (routing them through the
+  worker was tried and reverted — it did not fix Ollama's 403).
+- `lib.js` — pure grouping / dedupe / stale / URL logic, plus AI
+  preview validation and JSON extraction, shared by the popup and
+  the unit tests.
 - `popup.html` / `popup.js` / `popup.css` — the popup UI and Chrome wiring.
 - `options.html` / `options.js` — AI backend settings, default off.
 - `tests/unit.test.js` — Node unit tests, no dependencies.
@@ -131,6 +162,10 @@ Chrome APIs are mocked or driven by a real browser only where needed.
 ## Known prototype limits
 
 - Works on the current window only.
-- Chrome built-in AI depends on the browser build and flags.
+- Chrome built-in AI depends on the browser build and flags, and can
+  be disabled by enterprise policy.
+- Ollama 403 via the background worker is untested against a live
+  Ollama server in this environment — see the Ollama note above for
+  the fallback if it still occurs.
 - Cloud backend assumes an OpenAI-compatible chat-completions endpoint.
 - No sync across machines, no auto-close, by design.

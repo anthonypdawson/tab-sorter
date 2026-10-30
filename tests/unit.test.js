@@ -150,5 +150,43 @@ test("extractJson pulls a JSON list out of surrounding AI text", () => {
 });
 
 test("extractJson throws when there is no JSON list", () => {
-  assert.throws(() => Lib.extractJson("no json here"), /JSON list/);
+  assert.throws(() => Lib.extractJson("no json here"), /JSON group list/);
+});
+
+test("extractJson ignores a bracketed title before the JSON", () => {
+  // Regression for: Unexpected token 'J', "[JN-2644]**"... is not valid JSON
+  // The old code took the first "[" (the ticket bracket) as the JSON start.
+  const groups = Lib.extractJson(
+    '[JN-2644]** Ticket work\n[{"name":"Work","tabIds":[1,2]}]'
+  );
+  assert.deepEqual(groups, [{ name: "Work", tabIds: [1, 2] }]);
+});
+
+test("extractJson strips markdown fences and prose around the JSON", () => {
+  const groups = Lib.extractJson(
+    'Here you go:\n```json\n[{"name":"Code","tabIds":[3]}]\n```\nDone.'
+  );
+  assert.deepEqual(groups, [{ name: "Code", tabIds: [3] }]);
+});
+
+test("extractJson reports the model output instead of a raw token error", () => {
+  assert.throws(
+    () => Lib.extractJson('[JN-2644]** some ticket prose, no JSON at all'),
+    /Model output started: \[JN-2644\]/
+  );
+});
+
+test("filterValidAiGroups drops unknown ids, dedupes tabs, and reports unassigned", () => {
+  const tabs = [
+    tab(1, "One", "https://example.com/1"),
+    tab(2, "Two", "https://example.com/2"),
+    tab(3, "Three", "https://example.com/3"),
+  ];
+  const out = Lib.filterValidAiGroups(
+    [{ name: "A", tabIds: [1, 99, 2] }, { name: "B", tabIds: [2] }, { name: "Empty", tabIds: [] }],
+    tabs
+  );
+  assert.deepEqual(out.groups.map((g) => g.name), ["A"]);
+  assert.deepEqual(out.groups[0].tabs.map((t) => t.id), [1, 2]);
+  assert.deepEqual(out.unassigned.map((t) => t.id), [3]);
 });

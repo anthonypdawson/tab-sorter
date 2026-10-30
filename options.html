@@ -20,7 +20,7 @@
 <h2>Ollama (local)</h2>
 <label>URL <input id="ollamaUrl" size="40" value="http://localhost:11434"></label><br>
 <label>Model <input id="ollamaModel" size="30" value="qwen2.5:3b"></label>
-<p>Example: run <code>ollama serve</code> and <code>ollama pull qwen2.5:3b</code> first. Tab titles/URLs stay on your machine.</p>
+<p>Example: run <code>ollama serve</code> and <code>ollama pull qwen2.5:3b</code> first. Tab titles/URLs stay on your machine. If AI grouping still reports a 403, see the Ollama note in the README: it is Ollama rejecting the extension origin, and the fallback is <code>OLLAMA_ORIGINS</code> plus a full Ollama restart. Chrome built-in AI, below, can also be disabled by enterprise policy.</p>
 <h2>Cloud (only if you choose this)</h2>
 <label>Endpoint <input id="cloudUrl" size="50" placeholder="https://api.example.com/v1/chat/completions"></label><br>
 <label>Model <input id="cloudModel" size="30" value="gpt-4o-mini"></label><br>

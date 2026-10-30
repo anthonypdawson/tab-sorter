@@ -2,6 +2,10 @@
 // Tracks when each tab was last active, so the popup can flag stale tabs.
 // It never sends anything anywhere. AI, if enabled, runs from the popup/options,
 // not from here, and only when you press the AI button.
+// Note: routing AI fetches through this worker was tried and reverted —
+// it did not fix Ollama's 403, because both popup and worker send the
+// same chrome-extension:// origin. The Ollama setup is documented in
+// the README instead, via OLLAMA_ORIGINS.
 
 const LAST_SEEN_KEY = "tabSorterLastSeen";
 
