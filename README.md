@@ -60,7 +60,7 @@ Nothing is grouped until you press "Apply AI groups" in that preview;
 the popup discards the preview. If AI fails, it falls back to an
 error message and the rule-based groups still work.
 Parsing note: small local models often wrap JSON in prose or markdown,
-and tab titles can contain brackets like "[JN-2644]". The parser
+and tab titles can contain brackets like "[XYZ]". The parser
 strips fences and looks for a real `[{...}]` JSON array, instead of
 taking the first `[` in the response, which used to fail with
 "Unexpected token 'J'" on a ticket bracket. If the model returns no
