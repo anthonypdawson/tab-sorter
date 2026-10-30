@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Tab Sorter Settings</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:560px;margin:20px;">
+<h1>Tab Sorter Settings</h1>
+<p>AI is optional and off by default. The core grouping, dedupe, and stale checks work with no AI and send nothing anywhere.</p>
+<h2>Custom keyword groups</h2>
+<p>Generic groups (Work, Code, Email, Media) ship in the extension. Add your own groups here — these live only in your browser settings, never in the shipped code, so personal project names stay private. Custom groups win over generic ones.</p>
+<label>Custom groups (JSON)<br>
+<textarea id="customGroups" rows="6" cols="60" placeholder='[{"name":"My project","keywords":["alpha","beta"]}]'></textarea></label>
+<p>Format: a JSON list of objects with a <code>name</code> and a <code>keywords</code> list. A tab matching any keyword goes in that group.</p>
+<h2>AI backend</h2>
+<select id="backend">
+<option value="none">None (rule-based only)</option>
+<option value="ollama">Local Ollama</option>
+<option value="chrome">Chrome built-in on-device AI</option>
+<option value="cloud">Cloud API (OpenAI-compatible)</option>
+</select>
+</label>
+<h2>Ollama (local)</h2>
+<label>URL <input id="ollamaUrl" size="40" value="http://localhost:11434"></label><br>
+<label>Model <input id="ollamaModel" size="30" value="qwen2.5:3b"></label>
+<p>Example: run <code>ollama serve</code> and <code>ollama pull qwen2.5:3b</code> first. Tab titles/URLs stay on your machine.</p>
+<h2>Cloud (only if you choose this)</h2>
+<label>Endpoint <input id="cloudUrl" size="50" placeholder="https://api.example.com/v1/chat/completions"></label><br>
+<label>Model <input id="cloudModel" size="30" value="gpt-4o-mini"></label><br>
+<label>API key <input id="cloudKey" type="password" size="40"></label>
+<p>Warning: with a cloud backend, tab titles and URLs are sent to that endpoint when you press AI group. The key is stored in chrome.storage.local on this machine only.</p>
+<button id="save">Save</button>
+<p id="status"></p>
+<script src="options.js"></script>
+</body>
+</html>

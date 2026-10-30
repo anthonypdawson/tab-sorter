@@ -1,0 +1,33 @@
+name: Package extension
+
+# Packaging does NOT make a one-click install from GitHub.
+# Chrome / Brave cannot install an extension directly from a repo URL.
+# This workflow just builds a clean zip on every version tag, so a user
+# can download it from Releases, unzip it, and Load unpacked.
+# A true one-click install still requires publishing to the Chrome Web Store.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Build release zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build zip (extension files only, no tests, no workflows)
+        run: |
+          zip -r tab-sorter.zip \
+            manifest.json background.js lib.js \
+            popup.html popup.js popup.css \
+            options.html options.js README.md
+      - name: Create release with zip
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tab-sorter.zip
+          generate_release_notes: true

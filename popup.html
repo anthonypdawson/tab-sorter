@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tab Sorter</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<h1>Tab Sorter</h1>
+<p class="note" id="status">Loading tabs in this window…</p>
+
+<label>Stale after
+<select id="staleDays">
+<option value="1">1 day</option>
+<option value="3" selected>3 days</option>
+<option value="7">7 days</option>
+<option value="14">14 days</option>
+</select>
+</label>
+<button id="refresh">Refresh</button>
+<button id="aiGroup">AI group (optional)</button>
+<button id="openOptions">Settings</button>
+<p class="note" id="aiStatus"></p>
+
+<h2>Groups</h2>
+<div id="groups"></div>
+
+<h2>Duplicates</h2>
+<div id="dupes"></div>
+
+<h2>Stale tabs</h2>
+<div id="stale"></div>
+
+<h2>Recently closed by Tab Sorter</h2>
+<div id="archived"></div>
+<button id="clearArchived">Clear archived list</button>
+
+<script src="lib.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>
